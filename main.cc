@@ -93,14 +93,19 @@ typedef struct
 device_config* open_device (const char *device_name)
 {
   device_config* retval = NULL;
-  int fd = open(device_name, O_RDWR | O_NOCTTY);
+  int fd = open(device_name, O_RDWR);
 
   if (fd != -1)
   {
     struct termios options;
     tcgetattr(fd, &options);
-    options.c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
-    options.c_oflag &= ~(ONLCR | OCRNL);
+
+/*
+ * Need to check this somehow. Code from example hungs in case of hi speed.
+ */
+    options.c_lflag = 0;
+    options.c_oflag = 0;
+
     tcsetattr(fd, TCSANOW, &options);
     device_config *dc = (device_config*) malloc (sizeof(device_config));
     if (dc != NULL)
@@ -176,7 +181,7 @@ int set_current_speed(device_config* dc, int speed)
 {
   int retval = SERIAL_OK;
   unsigned char command[3];
-  LOG (LOG_INFO, "Set speed");
+  LOG (LOG_INFO, "Set speed %p %d", dc, speed);
  
   if (dc != NULL)
   {
@@ -192,11 +197,12 @@ int set_current_speed(device_config* dc, int speed)
     command[1] = speed & 0x1F;
     command[2] = speed >> 5 & 0x7F;
  
-    if (write(dc->file_descriptor, command, sizeof(command)) == -1)
+    if (write(dc->file_descriptor, command, sizeof(command)) < 0)
     {
       LOG (LOG_INFO, "Set speed ERROR");
       retval = SERIAL_ERROR;
     }
+    LOG (LOG_INFO, "Set speed done witn no errors");
   }
   else
   {
@@ -223,7 +229,6 @@ int main (int argc, char **argv)
   int n;
   int left = 0;
   int right = 0;
-  int sleep_time = 0;
   
 #if (PRINT_DEBUG == 1)
   openlog ("DC Motor", LOG_CONS | LOG_PID | LOG_NDELAY, LOG_LOCAL0);
@@ -231,12 +236,11 @@ int main (int argc, char **argv)
 
   LOG (LOG_INFO, "Test started");
 
-  if (argc == 4)
+  if (argc == 3)
   {
     left       = atoi(argv[1]);
     right      = atoi(argv[2]);
-    sleep_time = atoi(argv[3]);
-    printf ("Left  %d\nRight %d\nSleep %d\n", left, right, sleep_time);
+    printf ("Left  %d\nRight %d\n", left, right);
   } 
   n = scandir(devDir, &namelist, NULL, alphasort);
   if (n < 0)
@@ -255,28 +259,21 @@ int main (int argc, char **argv)
   device_config* dc1 = open_device ("/dev/ttyACM1");
   printf ("dc0 %p dc1 %p\n", dc0, dc1);
 
-  if (left == 0 && right == 0 && sleep_time == 0)
-  {
-    printf ("Exit safe start dc0 %d dc1 %d\n", exit_safe_start(dc0), exit_safe_start(dc1));
-    printf ("Speed dc0 %d dc1 %d\n", get_requested_speed(dc0), get_requested_speed(dc1));
-    printf ("Speed actual dc0 %d dc1 %d\n", get_current_speed(dc0), get_current_speed(dc1));
+  printf ("Exit safe start dc0 %d dc1 %d\n", exit_safe_start(dc0), exit_safe_start(dc1));
+  printf ("Speed dc0 %d dc1 %d\n", get_requested_speed(dc0), get_requested_speed(dc1));
+  printf ("Speed actual dc0 %d dc1 %d\n", get_current_speed(dc0), get_current_speed(dc1));
 
-    int up0 = get_powerup_time(dc0);
-    int up1 = get_powerup_time(dc1);
-    int up_min_0 = up0 / 60000;
-    int up_min_1 = up1 / 60000;
-    int up_sec_0 = up0 / 1000 - up_min_0 * 60;
-    int up_sec_1 = up1 / 1000 - up_min_1 * 60;
+  int up0 = get_powerup_time(dc0);
+  int up1 = get_powerup_time(dc1);
+  int up_min_0 = up0 / 60000;
+  int up_min_1 = up1 / 60000;
+  int up_sec_0 = up0 / 1000 - up_min_0 * 60;
+  int up_sec_1 = up1 / 1000 - up_min_1 * 60;
 
-    printf ("Uptime:\n  dc0 %d:%02d %d\n  dc1 %d:%02d %d\n", up_min_0, up_sec_0, up0, up_min_1, up_sec_1, up1);
-    printf ("Voltage dc0 %f dc1 %f\n", ((float)get_current_voltage(dc0)) / 1000, ((float)get_current_voltage(dc1)) / 1000);
-    printf ("Temperature dc0 %f dc1 %f\n", ((float) get_current_temperature(dc0)) / 10, ((float) get_current_temperature(dc1)) / 10);
-  }
-  else
-  {
-    printf ("Set speed left %d\nSet speed right %d\n", set_current_speed(dc0, left), set_current_speed(dc1, right));
-    usleep(sleep_time);
-  }
+  printf ("Uptime:\n  dc0 %d:%02d %d\n  dc1 %d:%02d %d\n", up_min_0, up_sec_0, up0, up_min_1, up_sec_1, up1);
+  printf ("Voltage dc0 %f dc1 %f\n", ((float)get_current_voltage(dc0)) / 1000, ((float)get_current_voltage(dc1)) / 1000);
+  printf ("Temperature dc0 %f dc1 %f\n", ((float) get_current_temperature(dc0)) / 10, ((float) get_current_temperature(dc1)) / 10);
+  printf ("Set speed left %d\nSet speed right %d\n", set_current_speed(dc0, left), set_current_speed(dc1, right));
   
   close_device(dc0);
   close_device(dc1);
