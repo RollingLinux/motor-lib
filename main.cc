@@ -5,6 +5,15 @@
 #include <fcntl.h>
 #include <termios.h>
 #include <unistd.h>
+#include <syslog.h>
+
+#define PRINT_DEBUG    1 
+
+#if PRINT_DEBUG
+  #define LOG(err, args...) syslog(err, ##args)
+#else
+  #define LOG(a) (void)0
+#endif
  
 static char const devPrefix[] =          "ttyACM";
 static char const devDir[]    =          "/dev/";
@@ -167,6 +176,7 @@ int set_current_speed(device_config* dc, int speed)
 {
   int retval = SERIAL_OK;
   unsigned char command[3];
+  LOG (LOG_INFO, "Set speed");
  
   if (dc != NULL)
   {
@@ -184,10 +194,9 @@ int set_current_speed(device_config* dc, int speed)
  
     if (write(dc->file_descriptor, command, sizeof(command)) == -1)
     {
-      perror("error writing");
+      LOG (LOG_INFO, "Set speed ERROR");
       retval = SERIAL_ERROR;
     }
-//    usleep(3000);
   }
   else
   {
@@ -215,6 +224,12 @@ int main (int argc, char **argv)
   int left = 0;
   int right = 0;
   int sleep_time = 0;
+  
+#if (PRINT_DEBUG == 1)
+  openlog ("DC Motor", LOG_CONS | LOG_PID | LOG_NDELAY, LOG_LOCAL0);
+#endif //#if (PRINT_DEBUG == 1)
+
+  LOG (LOG_INFO, "Test started");
 
   if (argc == 4)
   {
@@ -265,7 +280,11 @@ int main (int argc, char **argv)
   
   close_device(dc0);
   close_device(dc1);
+  LOG (LOG_INFO, "Test finished");
 
-  printf ("Test\n");
+#if (PRINT_DEBUG == 1)
+  closelog ();
+#endif //#if (PRINT_DEBUG == 1)
+
   return retval;
 }
